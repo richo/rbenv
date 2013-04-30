@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -e
-[ -n "$RBENV_DEBUG" ] && set -x
+export -n CDPATH
+
+if [ "$1" = "--debug" ]; then
+  export RBENV_DEBUG=1
+  shift
+fi
+
+if [ -n "$RBENV_DEBUG" ]; then
+  export PS4='+ [${BASH_SOURCE##*/}:${LINENO}] '
+  set -x
+fi
 
 resolve_link() {
   $(type -p greadlink readlink | head -1) "$1"
@@ -60,7 +70,10 @@ shopt -u nullglob
 command="$1"
 case "$command" in
 "" | "-h" | "--help" )
-  echo -e "rbenv 0.3.0\n$(rbenv-help)" >&2
+  echo -e "$(rbenv---version)\n$(rbenv-help)" >&2
+  ;;
+"-v" )
+  exec rbenv---version
   ;;
 * )
   command_path="$(command -v "rbenv-$command" || true)"

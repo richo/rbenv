@@ -1,182 +1,252 @@
-# Simple Ruby Version Management: rbenv
+# Groom your app’s Ruby environment with rbenv.
 
-rbenv lets you easily switch between multiple versions of Ruby. It's
-simple, unobtrusive, and follows the UNIX tradition of single-purpose
-tools that do one thing well.
+Use rbenv to pick a Ruby version for your application and guarantee
+that your development environment matches production. Put rbenv to work
+with [Bundler](http://gembundler.com/) for painless Ruby upgrades and
+bulletproof deployments.
 
-<img src="http://i.sstephenson.us/rbenv2.png" width="894" height="464">
+**Powerful in development.** Specify your app's Ruby version once,
+  in a single file. Keep all your teammates on the same page. No
+  headaches running apps on different versions of Ruby. Just Works™
+  from the command line and with app servers like [Pow](http://pow.cx).
+  Override the Ruby version anytime: just set an environment variable.
 
-### rbenv _does…_
+**Rock-solid in production.** Your application's executables are its
+  interface with ops. With rbenv and [Bundler
+  binstubs](https://github.com/sstephenson/rbenv/wiki/Understanding-binstubs)
+  you'll never again need to `cd` in a cron job or Chef recipe to
+  ensure you've selected the right runtime. The Ruby version
+  dependency lives in one place—your app—so upgrades and rollbacks are
+  atomic, even when you switch versions.
 
-* Let you **change the global Ruby version** on a per-user basis.
-* Provide support for **per-project Ruby versions**.
-* Allow you to **override the Ruby version** with an environment
-  variable.
+**One thing well.** rbenv is concerned solely with switching Ruby
+  versions. It's simple and predictable. A rich plugin ecosystem lets
+  you tailor it to suit your needs. Compile your own Ruby versions, or
+  use the [ruby-build](https://github.com/sstephenson/ruby-build)
+  plugin to automate the process. Specify per-application environment
+  variables with [rbenv-vars](https://github.com/sstephenson/rbenv-vars).
+  See more [plugins on the
+  wiki](https://github.com/sstephenson/rbenv/wiki/Plugins).
 
-### In contrast with rvm, rbenv _does not…_
-
-* **Need to be loaded into your shell.** Instead, rbenv's shim
-    approach works by adding a directory to your `$PATH`.
-* **Override shell commands like `cd`.** That's dangerous and
-    error-prone.
-* **Have a configuration file.** There's nothing to configure except
-    which version of Ruby you want to use.
-* **Install Ruby.** You can build and install Ruby yourself, or use
-    [ruby-build](https://github.com/sstephenson/ruby-build) to
-    automate the process.
-* **Manage gemsets.** [Bundler](http://gembundler.com/) is a better
-    way to manage application dependencies. If you have projects that
-    are not yet using Bundler you can install the
-    [rbenv-gemset](https://github.com/jamis/rbenv-gemset) plugin.
-* **Require changes to Ruby libraries for compatibility.** The
-    simplicity of rbenv means as long as it's in your `$PATH`,
-    [nothing](https://rvm.beginrescueend.com/integration/bundler/)
-    [else](https://rvm.beginrescueend.com/integration/capistrano/)
-    needs to know about it.
-* **Prompt you with warnings when you switch to a project.** Instead
-    of executing arbitrary code, rbenv reads just the version name
-    from each project. There's nothing to "trust."
+[**Why choose rbenv over
+RVM?**](https://github.com/sstephenson/rbenv/wiki/Why-rbenv%3F)
 
 ## Table of Contents
 
-   * [1 How It Works](#section_1)
-   * [2 Installation](#section_2)
-      * [2.1 Basic GitHub Checkout](#section_2.1)
-         * [2.1.1 Upgrading](#section_2.1.1)
-      * [2.2 Homebrew on Mac OS X](#section_2.2)
-      * [2.3 Neckbeard Configuration](#section_2.3)
-   * [3 Usage](#section_3)
-      * [3.1 rbenv global](#section_3.1)
-      * [3.2 rbenv local](#section_3.2)
-      * [3.3 rbenv shell](#section_3.3)
-      * [3.4 rbenv versions](#section_3.4)
-      * [3.5 rbenv version](#section_3.5)
-      * [3.6 rbenv rehash](#section_3.6)
-      * [3.7 rbenv which](#section_3.7)
-      * [3.8 rbenv whence](#section_3.8)
-   * [4 Development](#section_4)
-      * [4.1 Version History](#section_4.1)
-      * [4.2 License](#section_4.2)
+* [How It Works](#how-it-works)
+  * [Understanding PATH](#understanding-path)
+  * [Understanding Shims](#understanding-shims)
+  * [Choosing the Ruby Version](#choosing-the-ruby-version)
+  * [Locating the Ruby Installation](#locating-the-ruby-installation)
+* [Installation](#installation)
+  * [Basic GitHub Checkout](#basic-github-checkout)
+    * [Upgrading](#upgrading)
+  * [Homebrew on Mac OS X](#homebrew-on-mac-os-x)
+  * [Neckbeard Configuration](#neckbeard-configuration)
+  * [Uninstalling Ruby Versions](#uninstalling-ruby-versions)
+* [Command Reference](#command-reference)
+  * [rbenv local](#rbenv-local)
+  * [rbenv global](#rbenv-global)
+  * [rbenv shell](#rbenv-shell)
+  * [rbenv versions](#rbenv-versions)
+  * [rbenv version](#rbenv-version)
+  * [rbenv rehash](#rbenv-rehash)
+  * [rbenv which](#rbenv-which)
+  * [rbenv whence](#rbenv-whence)
+* [Development](#development)
+  * [Version History](#version-history)
+  * [License](#license)
 
-## <a name="section_1"></a> 1 How It Works
+## How It Works
 
-rbenv operates on the per-user directory `~/.rbenv`. Version names in
-rbenv correspond to subdirectories of `~/.rbenv/versions`. For
-example, you might have `~/.rbenv/versions/1.8.7-p354` and
-`~/.rbenv/versions/1.9.3-rc1`.
+At a high level, rbenv intercepts Ruby commands using shim
+executables injected into your `PATH`, determines which Ruby version
+has been specified by your application, and passes your commands along
+to the correct Ruby installation.
 
-Each version is a working tree with its own binaries, like
-`~/.rbenv/versions/1.8.7-p354/bin/ruby` and
-`~/.rbenv/versions/1.9.3-rc1/bin/irb`. rbenv makes _shim binaries_
-for every such binary across all installed versions of Ruby.
+### Understanding PATH
 
-These shims are simple wrapper scripts that live in `~/.rbenv/shims`
-and detect which Ruby version you want to use. They insert the
-directory for the selected version at the beginning of your `$PATH`
-and then execute the corresponding binary.
+When you run a command like `ruby` or `rake`, your operating system
+searches through a list of directories to find an executable file with
+that name. This list of directories lives in an environment variable
+called `PATH`, with each directory in the list separated by a colon:
 
-Because of the simplicity of the shim approach, all you need to use
-rbenv is `~/.rbenv/shims` in your `$PATH`.
+    /usr/local/bin:/usr/bin:/bin
 
-## <a name="section_2"></a> 2 Installation
+Directories in `PATH` are searched from left to right, so a matching
+executable in a directory at the beginning of the list takes
+precedence over another one at the end. In this example, the
+`/usr/local/bin` directory will be searched first, then `/usr/bin`,
+then `/bin`.
 
-**Compatibility note**: rbenv is _incompatible_ with rvm. Things will
-  appear to work until you try to install a gem. The problem is that
-  rvm actually overrides the `gem` command with a shell function!
-  Please remove any references to rvm before using rbenv.
+### Understanding Shims
 
-### <a name="section_2.1"></a> 2.1 Basic GitHub Checkout
+rbenv works by inserting a directory of _shims_ at the front of your
+`PATH`:
+
+    ~/.rbenv/shims:/usr/local/bin:/usr/bin:/bin
+
+Through a process called _rehashing_, rbenv maintains shims in that
+directory to match every Ruby command across every installed version
+of Ruby—`irb`, `gem`, `rake`, `rails`, `ruby`, and so on.
+
+Shims are lightweight executables that simply pass your command along
+to rbenv. So with rbenv installed, when you run, say, `rake`, your
+operating system will do the following:
+
+* Search your `PATH` for an executable file named `rake`
+* Find the rbenv shim named `rake` at the beginning of your `PATH`
+* Run the shim named `rake`, which in turn passes the command along to
+  rbenv
+
+### Choosing the Ruby Version
+
+When you execute a shim, rbenv determines which Ruby version to use by
+reading it from the following sources, in this order:
+
+1. The `RBENV_VERSION` environment variable, if specified. You can use
+   the [`rbenv shell`](#rbenv-shell) command to set this environment
+   variable in your current shell session.
+
+2. The application-specific `.ruby-version` file in the current
+   directory, if present. You can modify the current directory's
+   `.ruby-version` file with the [`rbenv local`](#rbenv-local)
+   command.
+
+3. The first `.ruby-version` file found by searching each parent
+   directory until reaching the root of your filesystem, if any.
+
+4. The global `~/.rbenv/version` file. You can modify this file using
+   the [`rbenv global`](#rbenv-global) command. If the global version
+   file is not present, rbenv assumes you want to use the "system"
+   Ruby—i.e. whatever version would be run if rbenv weren't in your
+   path.
+
+### Locating the Ruby Installation
+
+Once rbenv has determined which version of Ruby your application has
+specified, it passes the command along to the corresponding Ruby
+installation.
+
+Each Ruby version is installed into its own directory under
+`~/.rbenv/versions`. For example, you might have these versions
+installed:
+
+* `~/.rbenv/versions/1.8.7-p371/`
+* `~/.rbenv/versions/1.9.3-p327/`
+* `~/.rbenv/versions/jruby-1.7.1/`
+
+Version names to rbenv are simply the names of the directories in
+`~/.rbenv/versions`.
+
+## Installation
+
+**Compatibility note**: rbenv is _incompatible_ with RVM. Please make
+  sure to fully uninstall RVM and remove any references to it from
+  your shell initialization files before installing rbenv.
+
+If you're on Mac OS X, consider
+[installing with Homebrew](#homebrew-on-mac-os-x).
+
+### Basic GitHub Checkout
 
 This will get you going with the latest version of rbenv and make it
 easy to fork and contribute any changes back upstream.
 
 1. Check out rbenv into `~/.rbenv`.
 
-        $ cd
-        $ git clone git://github.com/sstephenson/rbenv.git .rbenv
+    ~~~ sh
+    $ git clone git://github.com/sstephenson/rbenv.git ~/.rbenv
+    ~~~
 
 2. Add `~/.rbenv/bin` to your `$PATH` for access to the `rbenv`
    command-line utility.
 
-        $ echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bash_profile
+    ~~~ sh
+    $ echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bash_profile
+    ~~~
 
-    **Zsh note**: Modify your `~/.zshenv` file instead of `~/.bash_profile`.
+    **Ubuntu note**: Modify your `~/.profile` instead of `~/.bash_profile`.
 
-3. Add rbenv init to your shell to enable shims and autocompletion.
+    **Zsh note**: Modify your `~/.zshrc` file instead of `~/.bash_profile`.
 
-        $ echo 'eval "$(rbenv init -)"' >> ~/.bash_profile
+3. Add `rbenv init` to your shell to enable shims and autocompletion.
 
-    **Zsh note**: Modify your `~/.zshenv` file instead of `~/.bash_profile`.
+    ~~~ sh
+    $ echo 'eval "$(rbenv init -)"' >> ~/.bash_profile
+    ~~~
 
-4. Restart your shell so the path changes take effect. You can now
-   begin using rbenv.
+    _Same as in previous step, use `~/.profile` on Ubuntu, `~/.zshrc` for Zsh._
 
-        $ exec $SHELL
+4. Restart your shell as a login shell so the path changes take effect.
+    You can now begin using rbenv.
 
-5. Install Ruby versions into `~/.rbenv/versions`. For example, to
-   install Ruby 1.9.2-p290, download and unpack the source, then run:
+    ~~~ sh
+    $ exec $SHELL -l
+    ~~~
 
-        $ ./configure --prefix=$HOME/.rbenv/versions/1.9.2-p290
-        $ make
-        $ make install
+5. Install [ruby-build](https://github.com/sstephenson/ruby-build),
+   which provides an `rbenv install` command that simplifies the
+   process of installing new Ruby versions.
 
-    The [ruby-build](https://github.com/sstephenson/ruby-build) project
-    provides an `rbenv install` command that simplifies the process of
-    installing new Ruby versions to:
+    ~~~
+    $ rbenv install 1.9.3-p327
+    ~~~
 
-        $ rbenv install 1.9.2-p290
+   As an alternative, you can download and compile Ruby yourself into
+   `~/.rbenv/versions/`.
 
-6. Rebuild the shim binaries. You should do this any time you install
-   a new Ruby binary (for example, when installing a new Ruby version,
-   or when installing a gem that provides a binary).
+6. Rebuild the shim executables. You should do this any time you
+   install a new Ruby executable (for example, when installing a new
+   Ruby version, or when installing a gem that provides a command).
 
-        $ rbenv rehash
+    ~~~
+    $ rbenv rehash
+    ~~~
 
-#### <a name="section_2.1.1"></a> 2.1.1 Upgrading
+#### Upgrading
 
-If you've installed rbenv using the instructions above, you can
-upgrade your installation at any time using git.
+If you've installed rbenv manually using git, you can upgrade your
+installation to the cutting-edge version at any time.
 
-To upgrade to the latest development version of rbenv, use `git pull`:
+~~~ sh
+$ cd ~/.rbenv
+$ git pull
+~~~
 
-    $ cd ~/.rbenv
-    $ git pull
+To use a specific release of rbenv, check out the corresponding tag:
 
-To upgrade to a specific release of rbenv, check out the corresponding
-tag:
+~~~ sh
+$ cd ~/.rbenv
+$ git fetch
+$ git checkout v0.3.0
+~~~
 
-    $ cd ~/.rbenv
-    $ git fetch
-    $ git tag
-    v0.1.0
-    v0.1.1
-    v0.1.2
-    v0.2.0
-    $ git checkout v0.2.0
-
-### <a name="section_2.2"></a> 2.2 Homebrew on Mac OS X
+### Homebrew on Mac OS X
 
 You can also install rbenv using the
 [Homebrew](http://mxcl.github.com/homebrew/) package manager on Mac OS
 X.
 
-    $ brew update
-    $ brew install rbenv
-    $ brew install ruby-build
+~~~
+$ brew update
+$ brew install rbenv
+$ brew install ruby-build
+~~~
 
-The same commands can be used for upgrading.
+To later update these installs, use `upgrade` instead of `install`.
 
 Afterwards you'll still need to add `eval "$(rbenv init -)"` to your
 profile as stated in the caveats. You'll only ever have to do this
 once.
 
-### <a name="section_2.3"></a> 2.3 Neckbeard Configuration
+### Neckbeard Configuration
 
 Skip this section unless you must know what every line in your shell
 profile is doing.
 
 `rbenv init` is the only command that crosses the line of loading
-extra commands into your shell. Coming from rvm, some of you might be
+extra commands into your shell. Coming from RVM, some of you might be
 opposed to this idea. Here's what `rbenv init` actually does:
 
 1. Sets up your shims path. This is the only requirement for rbenv to
@@ -189,7 +259,7 @@ opposed to this idea. Here's what `rbenv init` actually does:
    users.
 
 3. Rehashes shims. From time to time you'll need to rebuild your
-   shim files. Doing this on init makes sure everything is up to
+   shim files. Doing this automatically makes sure everything is up to
    date. You can always run `rbenv rehash` manually.
 
 4. Installs the sh dispatcher. This bit is also optional, but allows
@@ -202,19 +272,53 @@ opposed to this idea. Here's what `rbenv init` actually does:
 Run `rbenv init -` for yourself to see exactly what happens under the
 hood.
 
-## <a name="section_3"></a> 3 Usage
+### Uninstalling Ruby Versions
+
+As time goes on, Ruby versions you install will accumulate in your
+`~/.rbenv/versions` directory.
+
+To remove old Ruby versions, simply `rm -rf` the directory of the
+version you want to remove. You can find the directory of a particular
+Ruby version with the `rbenv prefix` command, e.g. `rbenv prefix
+1.8.7-p357`.
+
+The [ruby-build](https://github.com/sstephenson/ruby-build) plugin
+provides an `rbenv uninstall` command to automate the removal
+process.
+
+## Command Reference
 
 Like `git`, the `rbenv` command delegates to subcommands based on its
 first argument. The most common subcommands are:
 
-### <a name="section_3.1"></a> 3.1 rbenv global
+### rbenv local
+
+Sets a local application-specific Ruby version by writing the version
+name to a `.ruby-version` file in the current directory. This version
+overrides the global version, and can be overridden itself by setting
+the `RBENV_VERSION` environment variable or with the `rbenv shell`
+command.
+
+    $ rbenv local 1.9.3-p327
+
+When run without a version number, `rbenv local` reports the currently
+configured local version. You can also unset the local version:
+
+    $ rbenv local --unset
+
+Previous versions of rbenv stored local version specifications in a
+file named `.rbenv-version`. For backwards compatibility, rbenv will
+read a local version specified in an `.rbenv-version` file, but a
+`.ruby-version` file in the same directory will take precedence.
+
+### rbenv global
 
 Sets the global version of Ruby to be used in all shells by writing
 the version name to the `~/.rbenv/version` file. This version can be
-overridden by a per-project `.rbenv-version` file, or by setting the
-`RBENV_VERSION` environment variable.
+overridden by an application-specific `.ruby-version` file, or by
+setting the `RBENV_VERSION` environment variable.
 
-    $ rbenv global 1.9.2-p290
+    $ rbenv global 1.8.7-p352
 
 The special version name `system` tells rbenv to use the system Ruby
 (detected by searching your `$PATH`).
@@ -222,28 +326,13 @@ The special version name `system` tells rbenv to use the system Ruby
 When run without a version number, `rbenv global` reports the
 currently configured global version.
 
-### <a name="section_3.2"></a> 3.2 rbenv local
-
-Sets a local per-project Ruby version by writing the version name to
-an `.rbenv-version` file in the current directory. This version
-overrides the global, and can be overridden itself by setting the
-`RBENV_VERSION` environment variable or with the `rbenv shell`
-command.
-
-    $ rbenv local rbx-1.2.4
-
-When run without a version number, `rbenv local` reports the currently
-configured local version. You can also unset the local version:
-
-    $ rbenv local --unset
-
-### <a name="section_3.3"></a> 3.3 rbenv shell
+### rbenv shell
 
 Sets a shell-specific Ruby version by setting the `RBENV_VERSION`
-environment variable in your shell. This version overrides both
-project-specific versions and the global version.
+environment variable in your shell. This version overrides
+application-specific versions and the global version.
 
-    $ rbenv shell jruby-1.6.4
+    $ rbenv shell jruby-1.7.1
 
 When run without a version number, `rbenv shell` reports the current
 value of `RBENV_VERSION`. You can also unset the shell version:
@@ -255,9 +344,9 @@ the installation instructions) in order to use this command. If you
 prefer not to use shell integration, you may simply set the
 `RBENV_VERSION` variable yourself:
 
-    $ export RBENV_VERSION=jruby-1.6.4
+    $ export RBENV_VERSION=jruby-1.7.1
 
-### <a name="section_3.4"></a> 3.4 rbenv versions
+### rbenv versions
 
 Lists all Ruby versions known to rbenv, and shows an asterisk next to
 the currently active version.
@@ -265,60 +354,115 @@ the currently active version.
     $ rbenv versions
       1.8.7-p352
       1.9.2-p290
-    * 1.9.3-rc1 (set by /Users/sam/.rbenv/global)
-      jruby-1.6.4
+    * 1.9.3-p327 (set by /Users/sam/.rbenv/version)
+      jruby-1.7.1
       rbx-1.2.4
       ree-1.8.7-2011.03
 
-### <a name="section_3.5"></a> 3.5 rbenv version
+### rbenv version
 
 Displays the currently active Ruby version, along with information on
 how it was set.
 
     $ rbenv version
-    1.8.7-p352 (set by /Volumes/37signals/basecamp/.rbenv-version)
+    1.8.7-p352 (set by /Volumes/37signals/basecamp/.ruby-version)
 
-### <a name="section_3.6"></a> 3.6 rbenv rehash
+### rbenv rehash
 
-Installs shims for all Ruby binaries known to rbenv (i.e.,
+Installs shims for all Ruby executables known to rbenv (i.e.,
 `~/.rbenv/versions/*/bin/*`). Run this command after you install a new
-version of Ruby, or install a gem that provides binaries.
+version of Ruby, or install a gem that provides commands.
 
     $ rbenv rehash
 
-### <a name="section_3.7"></a> 3.7 rbenv which
+### rbenv which
 
-Displays the full path to the binary that rbenv will execute when you
-run the given command.
+Displays the full path to the executable that rbenv will invoke when
+you run the given command.
 
     $ rbenv which irb
-    /Users/sam/.rbenv/versions/1.9.2-p290/bin/irb
+    /Users/sam/.rbenv/versions/1.9.3-p327/bin/irb
 
-### <a name="section_3.8"></a> 3.8 rbenv whence
+### rbenv whence
 
 Lists all Ruby versions with the given command installed.
 
     $ rbenv whence rackup
-    1.9.3-rc1
-    jruby-1.6.4
+    1.9.3-p327
+    jruby-1.7.1
     ree-1.8.7-2011.03
 
-## <a name="section_4"></a> 4 Development
+## Development
 
 The rbenv source code is [hosted on
 GitHub](https://github.com/sstephenson/rbenv). It's clean, modular,
 and easy to understand, even if you're not a shell hacker.
 
+Tests are executed using [Bats](https://github.com/sstephenson/bats):
+
+    $ bats test
+    $ bats test/<file>.bats
+
 Please feel free to submit pull requests and file bugs on the [issue
 tracker](https://github.com/sstephenson/rbenv/issues).
 
-### <a name="section_4.1"></a> 4.1 Version History
+### Version History
+
+**0.4.0** (January 4, 2013)
+
+* rbenv now prefers `.ruby-version` files to `.rbenv-version` files
+  for specifying local application-specific versions. The
+  `.ruby-version` file has the same format as `.rbenv-version` but is
+  [compatible with other Ruby version
+  managers](https://gist.github.com/1912050).
+* Deprecated `ruby-local-exec` and moved its functionality into the
+  standard `ruby` shim. See the [ruby-local-exec wiki
+  page](https://github.com/sstephenson/rbenv/wiki/ruby-local-exec) for
+  upgrade instructions.
+* Modified shims to include the full path to rbenv so that they can be
+  invoked without having rbenv's bin directory in the `$PATH`.
+* Sped up `rbenv init` by avoiding rbenv reinitialization and by
+  using a simpler indexing approach. (Users of
+  [chef-rbenv](https://github.com/fnichol/chef-rbenv) should upgrade
+  to the latest version to fix a [compatibility
+  issue](https://github.com/fnichol/chef-rbenv/pull/26).)
+* Reworked `rbenv help` so that usage and documentation is stored as a
+  comment in each subcommand, enabling plugin commands to hook into
+  the help system.
+* Added support for full completion of the command line, not just the
+  first argument.
+* Updated installation instructions for Zsh and Ubuntu users.
+* Fixed `rbenv which` and `rbenv prefix` with system Ruby versions.
+* Changed `rbenv exec` to avoid prepending the system Ruby location to
+  `$PATH` to fix issues running system Ruby commands that invoke other
+  commands.
+* Changed `rbenv rehash` to ensure it exits with a 0 status code under
+  normal operation, and to ensure outdated shims are removed first
+  when rehashing.
+* Modified `rbenv rehash` to run `hash -r` afterwards, when shell
+  integration is enabled, to ensure the shell's command cache is
+  cleared.
+* Removed use of the `+=` operator to support older versions of Bash.
+* Adjusted non-bare `rbenv versions` output to include `system`, if
+  present.
+* Improved documentation for installing and uninstalling Ruby
+  versions.
+* Fixed `rbenv versions` not to display a warning if the currently
+  specified version doesn't exist.
+* Fixed an instance of local variable leakage in the `rbenv` shell
+  function wrapper.
+* Changed `rbenv shell` to ensure it exits with a non-zero status on
+  failure.
+* Added `rbenv --version` for printing the current version of rbenv.
+* Added `/usr/lib/rbenv/hooks` to the plugin hook search path.
+* Fixed `rbenv which` to account for path entries with spaces.
+* Changed `rbenv init` to accept option arguments in any order.
 
 **0.3.0** (December 25, 2011)
 
 * Added an `rbenv root` command which prints the value of
   `$RBENV_ROOT`, or the default root directory if it's unset.
-* Clarified Zsh installation instructions in the readme.
+* Clarified Zsh installation instructions in the Readme.
 * Removed some redundant code in `rbenv rehash`.
 * Fixed an issue with calling `readlink` for paths with spaces.
 * Changed Zsh initialization code to install completion hooks only for
@@ -388,11 +532,11 @@ tracker](https://github.com/sstephenson/rbenv/issues).
 
 * Initial public release.
 
-### <a name="section_4.2"></a> 4.2 License
+### License
 
 (The MIT license)
 
-Copyright (c) 2011 Sam Stephenson
+Copyright (c) 2013 Sam Stephenson
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
